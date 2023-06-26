@@ -1,4 +1,4 @@
-package webber
+package webbr
 
 import (
 	"testing"

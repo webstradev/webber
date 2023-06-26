@@ -1,4 +1,4 @@
-package webber
+package webbr
 
 import (
 	"encoding/binary"
@@ -53,23 +53,23 @@ type Collection struct {
 	*bbolt.Bucket
 }
 
-type Webber struct {
+type webbr struct {
 	db *bbolt.DB
 }
 
-func New() (*Webber, error) {
-	dbName := fmt.Sprintf("%s.webber", defaultDBName)
+func New() (*webbr, error) {
+	dbName := fmt.Sprintf("%s.webbr", defaultDBName)
 	db, err := bbolt.Open(dbName, 0666, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Webber{
+	return &webbr{
 		db: db,
 	}, nil
 }
 
-func (w *Webber) CreateCollectionIfNotExists(name string) (*Collection, error) {
+func (w *webbr) CreateCollectionIfNotExists(name string) (*Collection, error) {
 	tx, err := w.db.Begin(true)
 	if err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func (w *Webber) CreateCollectionIfNotExists(name string) (*Collection, error) {
 	return &coll, nil
 }
 
-func (w *Webber) Insert(collName string, data M) (uuid.UUID, error) {
+func (w *webbr) Insert(collName string, data M) (uuid.UUID, error) {
 	id := uuid.New()
 
 	tx, err := w.db.Begin(true)
@@ -127,7 +127,7 @@ func (w *Webber) Insert(collName string, data M) (uuid.UUID, error) {
 	return id, tx.Commit()
 }
 
-func (w *Webber) Find(coll string, filter Filter) ([]M, error) {
+func (w *webbr) Find(coll string, filter Filter) ([]M, error) {
 	tx, err := w.db.Begin(false)
 	if err != nil {
 		return nil, err
