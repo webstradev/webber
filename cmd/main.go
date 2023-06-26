@@ -38,5 +38,21 @@ func main() {
 		return nil
 	})
 
-	fmt.Println("we are here")
+	userData := make(map[string]string)
+	if err := db.View(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket([]byte("users"))
+		if bucket == nil {
+			return fmt.Errorf("bucket (%s) not found", "users")
+		}
+
+		bucket.ForEach(func(k, v []byte) error {
+			userData[string(k)] = string(v)
+			return nil
+		})
+
+		return nil
+	}); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(userData)
 }

@@ -1,4 +1,4 @@
-module github.com/westradev/webstradb
+module github.com/westradev/webber
 
 go 1.20
 
