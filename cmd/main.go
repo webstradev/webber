@@ -22,5 +22,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Println(id)
+	log.Println("Inserted user with id: ", id)
+
+	results, err := wb.Find("users", webber.Filter{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Printf("%+v\n", results)
 }

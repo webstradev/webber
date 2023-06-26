@@ -118,11 +118,6 @@ func (w *Webber) Insert(collName string, data M) (uuid.UUID, error) {
 		if err := recordBucket.Put([]byte(k), typeInfo.underlying); err != nil {
 			return id, err
 		}
-		b := make([]byte, 4)
-		binary.LittleEndian.PutUint32(b, uint32(typeInfo.valueType))
-		if err := recordBucket.Put([]byte("_type"), b); err != nil {
-			return id, err
-		}
 	}
 
 	if err := recordBucket.Put([]byte("id"), []byte(id.String())); err != nil {
@@ -132,8 +127,51 @@ func (w *Webber) Insert(collName string, data M) (uuid.UUID, error) {
 	return id, tx.Commit()
 }
 
-func (w *Webber) Select(coll, k string, query any) error {
-	return nil
+func (w *Webber) Find(coll string, filter Filter) ([]M, error) {
+	tx, err := w.db.Begin(false)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	bucket := tx.Bucket([]byte(coll))
+	if bucket == nil {
+		return nil, fmt.Errorf("collection (%s) not found", coll)
+	}
+
+	results := []M{}
+
+	bucket.ForEach(func(k, v []byte) error {
+		if v == nil {
+			entryBucket := bucket.Bucket(k)
+			if entryBucket == nil {
+				return fmt.Errorf("entry found without field data")
+			}
+
+			data := M{}
+			entryBucket.ForEach(func(k, v []byte) error {
+				data[string(k)] = string(v)
+				return nil
+			})
+			include := true
+			if filter.EQ != nil {
+				include = false
+				for filterKey, filterValue := range filter.EQ {
+					if value, ok := data[filterKey]; ok {
+						if value == filterValue {
+							include = true
+						}
+					}
+				}
+			}
+			if include {
+				results = append(results, data)
+			}
+		}
+		return nil
+	})
+
+	return results, nil
 }
 
 type ValueTypeInfo struct {
