@@ -7,20 +7,20 @@ import (
 )
 
 func main() {
-	// user := map[string]string{
-	// 	"name": "Erik",
-	// 	"age":  "27",
-	// }
+	userData := map[string]string{
+		"name": "Erik",
+		"age":  "27",
+	}
 
 	wb, err := webber.New()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	coll, err := wb.CreateCollection("users")
+	id, err := wb.Insert("users", userData)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Println(coll)
+	log.Println(id)
 }
