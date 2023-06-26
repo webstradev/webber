@@ -12,6 +12,22 @@ import (
 
 type ValueType int
 
+func (v ValueType) String() string {
+	switch v {
+	case ValueTypeUnknown:
+		return "unknown"
+	case ValueTypeString:
+		return "string"
+	case ValueTypeInt:
+		return "integer"
+	case ValueTypeBool:
+		return "boolean"
+	case ValueTypeFloat:
+		return "float"
+	}
+	return "unknown"
+}
+
 const (
 	ValueTypeUnknown = iota
 	ValueTypeString
