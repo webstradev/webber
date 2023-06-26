@@ -1,10 +1,23 @@
 package webber
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
+	"reflect"
 
 	"github.com/google/uuid"
 	"go.etcd.io/bbolt"
+)
+
+type ValueType int
+
+const (
+	ValueTypeUnknown = iota
+	ValueTypeString
+	ValueTypeInt
+	ValueTypeBool
+	ValueTypeFloat
 )
 
 const (
@@ -12,7 +25,13 @@ const (
 )
 
 // Helper type for a map[string]string (will be a map[string]any once more types are supported)
-type M map[string]string
+type M map[string]any
+
+type Filter struct {
+	EQ    M
+	Limit int
+	Sort  string
+}
 
 type Collection struct {
 	*bbolt.Bucket
@@ -75,7 +94,17 @@ func (w *Webber) Insert(collName string, data M) (uuid.UUID, error) {
 	}
 
 	for k, v := range data {
-		if err := recordBucket.Put([]byte(k), []byte(v)); err != nil {
+		typeInfo, err := getValueTypeInfo(v)
+		if err != nil {
+			return id, err
+		}
+		fmt.Printf("%+v\n", typeInfo)
+		if err := recordBucket.Put([]byte(k), typeInfo.underlying); err != nil {
+			return id, err
+		}
+		b := make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, uint32(typeInfo.valueType))
+		if err := recordBucket.Put([]byte("_type"), b); err != nil {
 			return id, err
 		}
 	}
@@ -89,4 +118,49 @@ func (w *Webber) Insert(collName string, data M) (uuid.UUID, error) {
 
 func (w *Webber) Select(coll, k string, query any) error {
 	return nil
+}
+
+type ValueTypeInfo struct {
+	valueType  ValueType
+	underlying []byte
+}
+
+func getValueTypeInfo(value any) (ValueTypeInfo, error) {
+	switch it := value.(type) {
+	case string:
+		return ValueTypeInfo{
+			valueType:  ValueTypeString,
+			underlying: []byte(it),
+		}, nil
+	case int:
+		b := make([]byte, 4)
+		binary.LittleEndian.PutUint32(b, uint32(it))
+		return ValueTypeInfo{
+			valueType:  ValueTypeInt,
+			underlying: b,
+		}, nil
+	case float64:
+		b := make([]byte, 8)
+		binary.LittleEndian.PutUint64(b, math.Float64bits(it))
+		return ValueTypeInfo{
+			valueType:  ValueTypeFloat,
+			underlying: b,
+		}, nil
+	case bool:
+		var b []byte
+		if it {
+			b = []byte{0x01}
+		} else {
+			b = []byte{0x00}
+		}
+		return ValueTypeInfo{
+			valueType:  ValueTypeBool,
+			underlying: b,
+		}, nil
+	default:
+		return ValueTypeInfo{
+			valueType:  ValueTypeUnknown,
+			underlying: []byte{},
+		}, fmt.Errorf("unsupported type (%s)", reflect.TypeOf(it))
+	}
 }

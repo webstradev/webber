@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	userData := map[string]string{
+	userData := webber.M{
 		"name": "Erik",
 		"age":  "27",
 	}
