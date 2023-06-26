@@ -84,7 +84,7 @@ func (w *Webber) Insert(collName string, data M) (uuid.UUID, error) {
 		return id, err
 	}
 
-	return id, err
+	return id, tx.Commit()
 }
 
 func (w *Webber) Select(coll, k string, query any) error {
