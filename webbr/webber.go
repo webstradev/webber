@@ -14,33 +14,7 @@ const (
 	defaultExtension = "webbr"
 )
 
-type ValueType int
-
-func (v ValueType) String() string {
-	switch v {
-	case ValueTypeUnknown:
-		return "unknown"
-	case ValueTypeString:
-		return "string"
-	case ValueTypeInt:
-		return "integer"
-	case ValueTypeBool:
-		return "boolean"
-	case ValueTypeFloat:
-		return "float"
-	}
-	return "unknown"
-}
-
-const (
-	ValueTypeUnknown = iota
-	ValueTypeString
-	ValueTypeInt
-	ValueTypeBool
-	ValueTypeFloat
-)
-
-// Helper type for a map[string]string (will be a map[string]any once more types are supported)
+// Helper type for a map[string]any
 type M map[string]any
 
 type Filter struct {
@@ -53,31 +27,6 @@ type Filter struct {
 type Webbr struct {
 	*Options
 	db *bbolt.DB
-}
-
-type OptFunc (func(opts *Options))
-
-type Options struct {
-	DBName    string
-	Extension string
-	Encoder   Encoder
-	Decoder   Decoder
-}
-
-func (o Options) GetDBName() string {
-	return fmt.Sprintf("%s.%s", o.DBName, o.Extension)
-}
-
-func WithDBName(name string) OptFunc {
-	return func(opts *Options) {
-		opts.DBName = name
-	}
-}
-
-func WithExtension(ext string) OptFunc {
-	return func(opts *Options) {
-		opts.Extension = ext
-	}
 }
 
 func New(options ...OptFunc) (*Webbr, error) {
