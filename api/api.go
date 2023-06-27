@@ -37,6 +37,10 @@ func (s *Server) HandlePostInsert(c echo.Context) error {
 }
 
 func (s *Server) HandleGetQuery(c echo.Context) error {
+	records, err := s.db.Find("users", webbr.Filter{})
+	if err != nil {
+		return err
+	}
 
-	return nil
+	return c.JSON(http.StatusOK, records)
 }
