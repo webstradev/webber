@@ -1,65 +1,77 @@
 package webbr
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/stretchr/testify/assert"
-)
-
-func TestValueType(t *testing.T) {
-	testCases := []struct {
-		name          string
-		input         any
-		expectedType  ValueType
-		expectedErr   bool
-		expectedValue any
-	}{
+func TestInsert(t *testing.T) {
+	values := []M{
 		{
-			name:          "string input",
-			input:         "test",
-			expectedType:  ValueTypeString,
-			expectedErr:   false,
+			"name": "Foo",
+			"age":  10,
 		},
 		{
-			name:         "boolean input",
-			input:        true,
-			expectedType: ValueTypeBool,
-			expectedErr:  false,
+			"name": "Bar",
+			"age":  88.3,
 		},
 		{
-			name:         "integer input",
-			input:        2,
-			expectedType: ValueTypeInt,
-			expectedErr:  false,
-		},
-		{
-			name:         "float input",
-			input:        2.9,
-			expectedType: ValueTypeFloat,
-			expectedErr:  false,
-		},
-		{
-			name:         "nil input",
-			input:        nil,
-			expectedType: ValueTypeUnknown,
-			expectedErr:  true,
+			"name": "Baz",
+			"age":  10,
 		},
 	}
 
-	for _, testCase := range testCases {
-		t.Run(testCase.name, func(t *testing.T) {
-			info, err := getValueTypeInfo(testCase.input)
-			if testCase.expectedErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
+	db, err := New(WithDBName("test"), WithExtension("tst"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.DropDatabase("test")
+	for i, data := range values {
+		id, err := db.Insert("users", data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if id != uint64(i+1) {
+			t.Fatalf("expect ID %d got %d", i, id)
+		}
 
-			assert.Equal(t, info.valueType, testCase.expectedType)
+	}
+	users, err := db.Find("users", Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != len(values) {
+		t.Fatalf("expecting %d result got %d", len(values), len(users))
+	}
+}
 
-			if testCase.expectedValue == nil {
-				assert.Equal(t, info.underlying, testCase.expectedValue)
-			}
-		})
+func TestFind(t *testing.T) {
+	db, err := New(WithDBName("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.DropDatabase("test")
+
+	data := M{
+		"name":    "Foobarbar",
+		"isAdmin": true,
+	}
+	id, err := db.Insert("auth", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != 1 {
+		t.Fatalf("expecting id 1 got %d", id)
+	}
+	results, err := db.Find("auth", Filter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expecting 1 result got %d", len(results))
+	}
+	result := results[0]
+	if result["name"] != data["name"] {
+		t.Fatalf("expected %s got %s", data["name"], result["name"])
+	}
+	if result["isAdmin"] != data["isAdmin"] {
+		t.Fatalf("expected %b got %b", data["isAdmin"], result["isAdmin"])
 	}
 }

@@ -2,12 +2,16 @@ package webbr
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
-	"math"
-	"reflect"
+	"os"
 
-	"github.com/google/uuid"
 	"go.etcd.io/bbolt"
+)
+
+const (
+	defaultDBName    = "default"
+	defaultExtension = "webbr"
 )
 
 type ValueType int
@@ -36,40 +40,70 @@ const (
 	ValueTypeFloat
 )
 
-const (
-	defaultDBName = "default"
-)
-
 // Helper type for a map[string]string (will be a map[string]any once more types are supported)
 type M map[string]any
 
 type Filter struct {
-	EQ    M
-	Limit int
-	Sort  string
+	EQ     M
+	Select []string
+	Limit  int
+	Sort   string
 }
 
-type Collection struct {
-	*bbolt.Bucket
-}
-
-type webbr struct {
+type Webbr struct {
+	*Options
 	db *bbolt.DB
 }
 
-func New() (*webbr, error) {
-	dbName := fmt.Sprintf("%s.webbr", defaultDBName)
-	db, err := bbolt.Open(dbName, 0666, nil)
+type OptFunc (func(opts *Options))
+
+type Options struct {
+	DBName    string
+	Extension string
+}
+
+func (o Options) GetDBName() string {
+	return fmt.Sprintf("%s.%s", o.DBName, o.Extension)
+}
+
+func WithDBName(name string) OptFunc {
+	return func(opts *Options) {
+		opts.DBName = name
+	}
+}
+
+func WithExtension(ext string) OptFunc {
+	return func(opts *Options) {
+		opts.Extension = ext
+	}
+}
+
+func New(options ...OptFunc) (*Webbr, error) {
+	opts := &Options{
+		DBName:    defaultDBName,
+		Extension: defaultExtension,
+	}
+
+	for _, fn := range options {
+		fn(opts)
+	}
+
+	db, err := bbolt.Open(opts.GetDBName(), 0666, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &webbr{
-		db: db,
+	return &Webbr{
+		db:      db,
+		Options: opts,
 	}, nil
 }
 
-func (w *webbr) CreateCollectionIfNotExists(name string) (*Collection, error) {
+func (w *Webbr) DropDatabase(name string) error {
+	return os.Remove(w.GetDBName())
+}
+
+func (w *Webbr) CreateCollection(name string) (*bbolt.Bucket, error) {
 	tx, err := w.db.Begin(true)
 	if err != nil {
 		return nil, err
@@ -77,58 +111,45 @@ func (w *webbr) CreateCollectionIfNotExists(name string) (*Collection, error) {
 
 	defer tx.Rollback()
 
-	coll := Collection{}
 	bucket, err := tx.CreateBucketIfNotExists([]byte(name))
 	if err != nil {
 		return nil, err
 	}
-	coll.Bucket = bucket
 
-	if err != nil {
-		return nil, err
-	}
-	return &coll, nil
+	return bucket, nil
 }
 
-func (w *webbr) Insert(collName string, data M) (uuid.UUID, error) {
-	id := uuid.New()
-
+func (w *Webbr) Insert(collName string, data M) (uint64, error) {
 	tx, err := w.db.Begin(true)
 	if err != nil {
-		return id, err
+		return 0, err
 	}
 	defer tx.Rollback()
 
 	collBucket, err := tx.CreateBucketIfNotExists([]byte(collName))
 	if err != nil {
-		return id, err
+		return 0, err
 	}
 
-	recordBucket, err := collBucket.CreateBucket([]byte(id.String()))
+	id, err := collBucket.NextSequence()
 	if err != nil {
-		return id, err
+		return 0, err
 	}
 
-	for k, v := range data {
-		typeInfo, err := getValueTypeInfo(v)
-		if err != nil {
-			return id, err
-		}
-		fmt.Printf("%+v\n", typeInfo)
-		if err := recordBucket.Put([]byte(k), typeInfo.underlying); err != nil {
-			return id, err
-		}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return 0, err
 	}
 
-	if err := recordBucket.Put([]byte("id"), []byte(id.String())); err != nil {
-		return id, err
+	if err := collBucket.Put(uint64ToBytes(id), b); err != nil {
+		return 0, err
 	}
 
 	return id, tx.Commit()
 }
 
-func (w *webbr) Find(coll string, filter Filter) ([]M, error) {
-	tx, err := w.db.Begin(false)
+func (w *Webbr) Find(coll string, filter Filter) ([]M, error) {
+	tx, err := w.db.Begin(true)
 	if err != nil {
 		return nil, err
 	}
@@ -140,33 +161,27 @@ func (w *webbr) Find(coll string, filter Filter) ([]M, error) {
 	}
 
 	results := []M{}
-
 	bucket.ForEach(func(k, v []byte) error {
-		if v == nil {
-			entryBucket := bucket.Bucket(k)
-			if entryBucket == nil {
-				return fmt.Errorf("entry found without field data")
-			}
+		data := M{
+			"id": uint64FromBytes(k),
+		}
+		if err := json.Unmarshal(v, &data); err != nil {
+			return err
+		}
 
-			data := M{}
-			entryBucket.ForEach(func(k, v []byte) error {
-				data[string(k)] = string(v)
-				return nil
-			})
-			include := true
-			if filter.EQ != nil {
-				include = false
-				for filterKey, filterValue := range filter.EQ {
-					if value, ok := data[filterKey]; ok {
-						if value == filterValue {
-							include = true
-						}
+		include := true
+		if filter.EQ != nil {
+			include = false
+			for filterKey, filterValue := range filter.EQ {
+				if value, ok := data[filterKey]; ok {
+					if filterValue == value {
+						include = true
 					}
 				}
 			}
-			if include {
-				results = append(results, data)
-			}
+		}
+		if include {
+			results = append(results, data)
 		}
 		return nil
 	})
@@ -174,47 +189,13 @@ func (w *webbr) Find(coll string, filter Filter) ([]M, error) {
 	return results, nil
 }
 
-type ValueTypeInfo struct {
-	valueType  ValueType
-	underlying []byte
+// Helper functions
+func uint64ToBytes(n uint64) []byte {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, n)
+	return b
 }
 
-func getValueTypeInfo(value any) (ValueTypeInfo, error) {
-	switch it := value.(type) {
-	case string:
-		return ValueTypeInfo{
-			valueType:  ValueTypeString,
-			underlying: []byte(it),
-		}, nil
-	case int:
-		b := make([]byte, 4)
-		binary.LittleEndian.PutUint32(b, uint32(it))
-		return ValueTypeInfo{
-			valueType:  ValueTypeInt,
-			underlying: b,
-		}, nil
-	case float64:
-		b := make([]byte, 8)
-		binary.LittleEndian.PutUint64(b, math.Float64bits(it))
-		return ValueTypeInfo{
-			valueType:  ValueTypeFloat,
-			underlying: b,
-		}, nil
-	case bool:
-		var b []byte
-		if it {
-			b = []byte{0x01}
-		} else {
-			b = []byte{0x00}
-		}
-		return ValueTypeInfo{
-			valueType:  ValueTypeBool,
-			underlying: b,
-		}, nil
-	default:
-		return ValueTypeInfo{
-			valueType:  ValueTypeUnknown,
-			underlying: []byte{},
-		}, fmt.Errorf("unsupported type (%s)", reflect.TypeOf(it))
-	}
+func uint64FromBytes(b []byte) uint64 {
+	return binary.LittleEndian.Uint64(b)
 }
