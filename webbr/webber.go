@@ -60,6 +60,8 @@ type OptFunc (func(opts *Options))
 type Options struct {
 	DBName    string
 	Extension string
+	Encoder   Encoder
+	Decoder   Decoder
 }
 
 func (o Options) GetDBName() string {
@@ -82,6 +84,8 @@ func New(options ...OptFunc) (*Webbr, error) {
 	opts := &Options{
 		DBName:    defaultDBName,
 		Extension: defaultExtension,
+		Encoder:   JSONEncoder{},
+		Decoder:   JSONDecoder{},
 	}
 
 	for _, fn := range options {
