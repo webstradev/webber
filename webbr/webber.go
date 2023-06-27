@@ -203,31 +203,10 @@ func (w *Webbr) Find(coll string, filter Filter) ([]M, error) {
 		return nil, fmt.Errorf("collection (%s) not found", coll)
 	}
 
-	results := []M{}
-	bucket.ForEach(func(k, v []byte) error {
-		data := M{
-			"id": uint64FromBytes(k),
-		}
-		if err := json.Unmarshal(v, &data); err != nil {
-			return err
-		}
-
-		include := true
-		if filter.EQ != nil {
-			include = false
-			for filterKey, filterValue := range filter.EQ {
-				if value, ok := data[filterKey]; ok {
-					if filterValue == value {
-						include = true
-					}
-				}
-			}
-		}
-		if include {
-			results = append(results, data)
-		}
-		return nil
-	})
+	results, err := w.findFiltered(bucket, filter)
+	if err != nil {
+		return nil, err
+	}
 
 	return results, nil
 }

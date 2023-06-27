@@ -104,3 +104,33 @@ func TestUpdate(t *testing.T) {
 		t.Fatalf("expected to have updated name to %s but got %s", update["name"], results[0]["name"])
 	}
 }
+
+func TestSelect(t *testing.T) {
+	db, err := New(WithDBName("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.DropDatabase("test")
+
+	data := M{"name": "foobarbaz"}
+	_, err = db.Insert("users", data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	filter := Filter{
+		Select: []string{"name"},
+	}
+	results, err := db.Find("users", filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected to have 1 result got %d", len(results))
+	}
+	if _, ok := results[0]["id"]; ok {
+		t.Fatal("didnt selected id")
+	}
+	if results[0]["name"] != data["name"] {
+		t.Fatalf("expected name to be %s got %s", data["name"], results[0]["name"])
+	}
+}
